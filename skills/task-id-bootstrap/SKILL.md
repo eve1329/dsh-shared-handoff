@@ -34,10 +34,31 @@ created directory by itself is only an initialized task.
 This skill's bootstrap script needs Python 3.9+. The `handoff` skill is pure
 instructions and works without Python.
 
+### Interpreter detection (platform-specific)
+
 Verify the interpreter before the first bootstrap (cheap, no side effects):
 
 - macOS / Linux: `python3 --version`
-- Windows: `py -3 --version` (fall back to `python --version`)
+- Windows — **treat Windows 10 and Windows 11 differently**:
+
+  | Check | Windows 10 | Windows 11 |
+  |---|---|---|
+  | First command to try | `py -3 --version` | `py -3 --version` |
+  | `py` launcher present? | Only if the python.org installer was run, or the standalone py launcher was installed; it is not guaranteed on a clean system | Usually present once any python.org Python is installed; the new "Python install manager" (PyManager, Store) also registers a `python`/`py` surface but its behavior differs from the classic launcher |
+  | Bare `python` means | App execution alias stub by default — typing it opens the Microsoft Store or prints "Python was not found"; a real python.exe from PATH can also lose priority to the stub | Same stub mechanism; on newer builds the alias may point at the Python install manager instead |
+  | Fallback order | `py -3` → `python` → `python3` | `py -3` → `python` → `python3` |
+  | Package installer | `winget` only on Win10 1809+ with App Installer, and it registers after first login; otherwise use choco/scoop or the python.org MSI | `winget` preinstalled; on home/pro systems behind policy, may still be absent — fall back to choco/scoop or the python.org installer |
+
+  Never trust a bare `python` on Windows without checking what it resolves to:
+  the Store alias stub exits nonzero and prints a "Python was not found" hint,
+  and pymanager's alias prints its own banner. When `py -3 --version` prints a
+  real `Python 3.9+` version line, use `py -3`. When in doubt, run
+  `Get-Command python, python3, py -ErrorAction SilentlyContinue` and inspect
+  the `Source` paths: a stub lives under
+  `WindowsApps\python*.exe`, a real interpreter under
+  `Python3x\python.exe`, `%LocalAppData%\Python`, or a package-manager shim.
+
+### Installing Python with consent
 
 If the interpreter is missing, do not silently install system packages:
 
@@ -47,8 +68,12 @@ If the interpreter is missing, do not silently install system packages:
    - Debian/Ubuntu: `sudo apt-get install -y python3`
    - Fedora: `sudo dnf install -y python3`
    - Arch: `sudo pacman -S --noconfirm python`
-   - Windows: `winget install -e --id Python.Python.3.12`
+   - Windows 11: `winget install -e --id Python.Python.3.12`
      (alternatives: `choco install python3` or `scoop install python`)
+   - Windows 10: try the same `winget` command only if `winget --version`
+     works; otherwise recommend `choco install python3`, `scoop install python`,
+     or the python.org installer (pick "Add python.exe to PATH" so the classic
+     `py` launcher is registered)
 2. Only after explicit user consent, run that command for the user, then
    re-verify the version before continuing.
 3. If the user declines, stop and report that task-id bootstrap is
@@ -57,6 +82,11 @@ If the interpreter is missing, do not silently install system packages:
    interpreter: the bundled lock module keeps `.agents/state/` safe when the
    Codex or Claude editions share the same repository, and its lock semantics
    must stay identical across all editions.
+4. After any Windows install, if a real interpreter still loses to the Store
+   alias stub, tell the user to open "Manage app execution aliases" from
+   Start, switch the "App Installer" Python entries to "Off", then re-verify
+   with `py -3 --version`. Do not attempt to edit alias settings yourself:
+   they are user settings and the Settings app owns them.
 
 ## Workflow
 
