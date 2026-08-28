@@ -6,7 +6,7 @@
   "author": "ming",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eve1329/shared-handoff-dsh.git"
+    "url": "git+https://github.com/eve1329/dsh-shared-handoff.git"
   },
   "type": "module",
   "main": "./lib/index.js",
