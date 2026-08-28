@@ -1,0 +1,114 @@
+# shared-handoff-dsh
+
+[English](README.md) | [中文](README.zh.md)
+
+A DeepSeek Harness (`dsh`) skill plugin that ports the shared-handoff-kit's
+handoff workflow: it packages the `handoff` and `task-id-bootstrap` skills
+with zero dependencies and no build step, adapted for macOS, Linux, and
+Windows (including Windows 10 vs Windows 11 Python environment differences).
+
+## Skills
+
+| Skill | What it does | Requires |
+|---|---|---|
+| `handoff` | Evidence-driven session handoff: export/resume, interoperable across Codex, Claude, and dsh | Nothing (pure instructions) |
+| `task-id-bootstrap` | Repo-local task state under `.agents/state/tasks/<task-id>/`, binding the current dsh session (`DSH_SESSION_JSONL`) to the task | Python 3.9+ |
+
+## Install
+
+```sh
+dsh plugin --profile web add shared-handoff-dsh
+```
+
+After restarting `dsh web`, both skills join the skill catalog and the model
+loads them through the `skill` tool.
+
+## Usage
+
+Once installed there is **no command to remember** — the skills are
+triggered conversationally and the model loads the right SKILL.md itself.
+
+### task-id-bootstrap: open a task
+
+Just say in a dsh chat (adjacent Chinese/English punctuation both work):
+
+```text
+新开task-id=init-kmp，然后开个 init-kmp 分支
+```
+
+The model runs the bundled bootstrap script; success is proven by three
+lines:
+
+```text
+Task state: .../.agents/state/tasks/init-kmp
+Current task: init-kmp
+Session binding: /Users/you/.dsh/sessions/.../session.jsonl.zstd
+```
+
+Progress then lives in `.agents/state/tasks/init-kmp/process.md`; say
+`继续，task-id=init-kmp` later to resume. **A directory without a session
+binding is only a partial result** — the model must report it as such.
+
+If Python (3.9+) is missing on first use, the model reports the gap and
+shows the install command for your platform, installing **only after your
+explicit consent** — never silently.
+
+### handoff: export / resume a session
+
+When a thread gets long and you want a fresh one, say:
+
+```text
+帮我做个 handoff
+```
+
+You get a **paste-ready next-thread prompt** (workspace / branch / done /
+verification status / next step). In the fresh session, open with:
+
+```text
+继续上次 handoff
+```
+
+The model rebuilds context from state files instead of chat history.
+Phrases like `交接`, `新开线程继续`, `继续上次`, and `resume` trigger it too.
+
+### The two skills cooperate
+
+When a `task-id` is active in the same repo, `handoff` treats
+`.agents/state/tasks/<task-id>/process.md` as the canonical state instead
+of inventing a parallel one.
+
+### Cross-agent handoff
+
+The state layout is identical to the Codex and Claude editions: a handoff
+exported from dsh can be resumed in Codex or Claude and vice versa (all
+three share the same `session-tasks.json`).
+
+## Design notes
+
+- **archify-dsh pattern**: `cordis.patch.yml` mounts an isolated
+  `@deepseek-ai/dsh-skill-filesystem` instance (`includeDefaultRoots: false`
+  + a unique `providerName` + `bundledSkillDir` pointing at the packaged
+  `skills/`), leaving the stock `filesystem` provider untouched.
+- **Session binding**: dsh injects `DSH_SESSION_JSONL` (the current session
+  transcript path) into the managed bash/PowerShell environment; the
+  bootstrap script binds it via `--transcript-path` with zero script changes,
+  writing into the same `session-tasks.json` the Codex/Claude editions use.
+- **Cross-platform**: the SKILL.md ships both bash and PowerShell command
+  forms plus a Windows 10/11 Python detection matrix (py launcher, Store
+  alias stub, winget availability); the lock module uses `fcntl` on POSIX
+  and `msvcrt` on Windows, identical to the original.
+- **Missing Python**: never installed silently — report the gap, show the
+  platform-specific command, install only after explicit consent; the
+  `handoff` skill keeps working regardless.
+
+## Known limitations
+
+- Only the two platform-neutral skills were ported; `claude-handoff`
+  (Claude Code specific) and the Codex/Claude hook runtimes stay with the
+  original kit.
+- Local path installs (`dsh plugin add <path>`) resolve as a link/copy;
+  publishing to npm is the sturdier sharing route.
+
+## License
+
+MIT (inherited from shared-handoff-kit).
