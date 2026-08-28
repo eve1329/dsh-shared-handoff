@@ -17,7 +17,7 @@ Windows (including Windows 10 vs Windows 11 Python environment differences).
 ## Install
 
 ```sh
-dsh plugin --profile web add ~/dsh-plugins/shared-handoff-dsh
+dsh plugin --profile web add shared-handoff-dsh
 ```
 
 After restarting `dsh web`, both skills join the skill catalog and the model

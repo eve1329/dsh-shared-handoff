@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "Shared handoff kit for DeepSeek Harness: evidence-driven handoff and repo-local task-id state skills, cross-platform (macOS/Linux/Windows).",
   "license": "MIT",
+  "author": "ming",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eve1329/shared-handoff-dsh.git"
+  },
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -13,7 +18,9 @@
     "lib",
     "cordis.patch.yml",
     "skills",
-    "README.md"
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
   ],
   "keywords": [
     "dsh-plugin",

@@ -17,7 +17,7 @@ Harness（`dsh`）的技能插件：打包 `handoff` 与 `task-id-bootstrap` 两
 ## 安装
 
 ```sh
-dsh plugin --profile web add ~/dsh-plugins/shared-handoff-dsh
+dsh plugin --profile web add shared-handoff-dsh
 ```
 
 重启 `dsh web` 后，两个技能进入技能目录，模型经 `skill` 工具加载。
