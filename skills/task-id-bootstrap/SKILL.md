@@ -29,6 +29,35 @@ Treat these as separate results:
 **Do not say the current task was switched unless all three are verified.** A
 created directory by itself is only an initialized task.
 
+## Prerequisites
+
+This skill's bootstrap script needs Python 3.9+. The `handoff` skill is pure
+instructions and works without Python.
+
+Verify the interpreter before the first bootstrap (cheap, no side effects):
+
+- macOS / Linux: `python3 --version`
+- Windows: `py -3 --version` (fall back to `python --version`)
+
+If the interpreter is missing, do not silently install system packages:
+
+1. Report the missing prerequisite plus the exact command for this platform,
+   and ask the user for consent:
+   - macOS: `xcode-select --install` (system python3) or `brew install python3`
+   - Debian/Ubuntu: `sudo apt-get install -y python3`
+   - Fedora: `sudo dnf install -y python3`
+   - Arch: `sudo pacman -S --noconfirm python`
+   - Windows: `winget install -e --id Python.Python.3.12`
+     (alternatives: `choco install python3` or `scoop install python`)
+2. Only after explicit user consent, run that command for the user, then
+   re-verify the version before continuing.
+3. If the user declines, stop and report that task-id bootstrap is
+   unavailable while the `handoff` skill remains usable. Never rewrite the
+   bundled scripts into another language on the fly to bypass a missing
+   interpreter: the bundled lock module keeps `.agents/state/` safe when the
+   Codex or Claude editions share the same repository, and its lock semantics
+   must stay identical across all editions.
+
 ## Workflow
 
 1. Read repo instructions first.
