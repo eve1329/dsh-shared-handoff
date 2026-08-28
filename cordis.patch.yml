@@ -1,0 +1,16 @@
+# Shared handoff kit Skill provider for DeepSeek Harness (dsh).
+# Ships the `handoff` and `task-id-bootstrap` skills from this package's
+# skills/ directory as an isolated, trusted provider (archify-dsh pattern).
+# The packaged Skill root is resolved from the installed npm identity anchored
+# at the DSH profile (Loader baseUrl) via node:path/node:module, never as a
+# string concatenated onto baseUrl, so it stays correct on macOS, Linux, and
+# Windows. The bundled root is trusted-host, so its scripts run without extra
+# gating; includeDefaultRoots:false keeps this provider from also exposing the
+# user's project/user skill roots, which the base `filesystem` provider owns.
+- insert:
+    - id: shared-handoff-skill-filesystem
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: shared-handoff-dsh
+        includeDefaultRoots: false
+        bundledSkillDir: !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('shared-handoff-dsh/package.json')), 'skills')
