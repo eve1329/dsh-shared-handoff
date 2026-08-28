@@ -14,3 +14,17 @@
         providerName: shared-handoff-dsh
         includeDefaultRoots: false
         bundledSkillDir: !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('shared-handoff-dsh/package.json')), 'skills')
+
+    # Host half: hook equivalents over the harness event system.
+    # agent/pre-step (step 1) injects the active task baseline (SessionStart);
+    # session/event turn/end refreshes process.auto.md (Stop);
+    # compaction/start|summary write snapshots and the context_guard marker
+    # (PreCompact/PostCompact). All writes land in the same .agents/state/
+    # layout the Codex and Claude editions use, under the session's cwd.
+    - id: shared-handoff
+      name: 'shared-handoff-dsh'
+      config:
+        enabled: true
+        injectBaseline: true
+        autoSnapshot: true
+        compactionGuard: true

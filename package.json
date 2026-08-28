@@ -1,6 +1,6 @@
 {
   "name": "shared-handoff-dsh",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared handoff kit for DeepSeek Harness: evidence-driven handoff and repo-local task-id state skills, cross-platform (macOS/Linux/Windows).",
   "license": "MIT",
   "type": "module",

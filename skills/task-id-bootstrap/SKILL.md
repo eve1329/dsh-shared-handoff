@@ -29,6 +29,22 @@ Treat these as separate results:
 **Do not say the current task was switched unless all three are verified.** A
 created directory by itself is only an initialized task.
 
+## Automatic host support
+
+When this skill is loaded from the `shared-handoff-dsh` plugin (the usual
+case), its host half already automates what the Codex/Claude hooks did:
+
+- The active task's `process.md` / `process.auto.md` is injected as a
+  baseline user message at the session's first step — do not re-derive or
+  re-read those files unless the injected baseline is missing.
+- `process.auto.md` is refreshed automatically at every turn end and across
+  compactions — **never edit `process.auto.md` or `context_guard.json`
+  yourself**; they are host-owned metadata. Maintain `process.md` by hand as
+  instructed below.
+- If the baseline was not injected (plugin missing, repo has no
+  `.agents/state/`, or a fresh clone), run the bootstrap script as described
+  below to initialize state before continuing.
+
 ## Prerequisites
 
 This skill's bootstrap script needs Python 3.9+. The `handoff` skill is pure
