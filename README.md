@@ -17,7 +17,7 @@ Windows (including Windows 10 vs Windows 11 Python environment differences).
 ## Install
 
 ```sh
-dsh plugin --profile web add shared-handoff-dsh
+dsh plugin --profile web add ~/dsh-plugins/shared-handoff-dsh
 ```
 
 After restarting `dsh web`, both skills join the skill catalog and the model
@@ -83,12 +83,48 @@ The state layout is identical to the Codex and Claude editions: a handoff
 exported from dsh can be resumed in Codex or Claude and vice versa (all
 three share the same `session-tasks.json`).
 
+## Automation (hook equivalents)
+
+The three behaviors the original kit implemented through Codex/Claude hooks
+run automatically on the dsh host side via the harness event system —
+**installed, they just work**:
+
+| Original hook | dsh equivalent | Behavior |
+|---|---|---|
+| `SessionStart` | first `agent/pre-step` (step 1) | The active task's `process.md` / `process.auto.md` is injected as a baseline user message — say "继续" in a fresh session and the state is already there |
+| `Stop` | `session/event` `turn/end` | `process.auto.md` is refreshed after every turn (capturing the turn's last model output) and mirrored into an existing `process.recent.md` |
+| `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | Snapshots are written before and after compaction plus a `context_guard.json` marker, and the guard state rides along with the injected baseline |
+
+Task resolution matches the original: the session's transcript binding in
+`session-tasks.json` first (dsh sessions align by their transcript path
+under `$DSH_HOME/sessions`), then the `current-task` pointer. Every write
+lands in the same `.agents/state/` the Codex/Claude editions use.
+
+To disable a piece, override the row in your profile patch:
+
+```yaml
+- id: shared-handoff
+  name: 'shared-handoff-dsh'
+  config:
+    injectBaseline: false   # no session-start injection
+    autoSnapshot: false     # no per-turn snapshots
+    compactionGuard: false  # no compaction guard
+```
+
+`process.auto.md` and `context_guard.json` are host-owned metadata — the
+SKILL.md tells the model never to hand-write them; `process.md` stays
+model-maintained.
+
 ## Design notes
 
 - **archify-dsh pattern**: `cordis.patch.yml` mounts an isolated
   `@deepseek-ai/dsh-skill-filesystem` instance (`includeDefaultRoots: false`
   + a unique `providerName` + `bundledSkillDir` pointing at the packaged
   `skills/`), leaving the stock `filesystem` provider untouched.
+- **Host half (hook equivalents)**: zero external dependencies (Node
+  builtins only) — listens to `agent/pre-step` and `session/event` for
+  injection/snapshots/guard, see Automation above; listeners swallow their
+  own errors, so a snapshot failure can never break the agent loop.
 - **Session binding**: dsh injects `DSH_SESSION_JSONL` (the current session
   transcript path) into the managed bash/PowerShell environment; the
   bootstrap script binds it via `--transcript-path` with zero script changes,
@@ -99,14 +135,18 @@ three share the same `session-tasks.json`).
   and `msvcrt` on Windows, identical to the original.
 - **Missing Python**: never installed silently — report the gap, show the
   platform-specific command, install only after explicit consent; the
-  `handoff` skill keeps working regardless.
+  `handoff` skill and the host-half automation work regardless (they need
+  no Python).
 
 ## Known limitations
 
 - Only the two platform-neutral skills were ported; `claude-handoff`
   (Claude Code specific) and the Codex/Claude hook runtimes stay with the
   original kit.
-- Local path installs (`dsh plugin add <path>`) resolve as a link/copy;
+- The auto snapshot records the turn's last model output verbatim (facts,
+  not summaries) — semantic progress still lives in the model-maintained
+  `process.md`.
+- Local path installs (`dsh plugin add <path>`) resolve as a link;
   publishing to npm is the sturdier sharing route.
 
 ## License
