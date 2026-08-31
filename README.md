@@ -92,7 +92,7 @@ run automatically on the dsh host side via the harness event system —
 | Original hook | dsh equivalent | Behavior |
 |---|---|---|
 | `SessionStart` | first `agent/pre-step` (step 1) | The active task's `process.md` / `process.auto.md` is injected as a baseline user message — say "继续" in a fresh session and the state is already there |
-| `Stop` | `session/event` `turn/end` | `process.auto.md` is refreshed after every turn (capturing the turn's last model output) and mirrored into an existing `process.recent.md` |
+| `Stop` | `session/event` `turn/end` | `process.auto.md` is refreshed after every turn (capturing the turn's last model output) and mirrored into an existing `process.recent.md`; the same turn also appends one summary line to the `## Auto Log` section of `process.md` (newest last, capped at `maxLogEntries`, hand-written sections untouched) |
 | `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | Snapshots are written before and after compaction plus a `context_guard.json` marker, and the guard state rides along with the injected baseline |
 
 Task resolution matches the original: the session's transcript binding in
@@ -108,12 +108,16 @@ To disable a piece, override the row in your profile patch:
   config:
     injectBaseline: false   # no session-start injection
     autoSnapshot: false     # no per-turn snapshots
+    autoLog: false          # no per-turn Auto Log lines in process.md
     compactionGuard: false  # no compaction guard
+    maxLogChars: 300        # per-entry truncation for Auto Log lines
+    maxLogEntries: 100      # Auto Log section length cap
 ```
 
 `process.auto.md` and `context_guard.json` are host-owned metadata — the
 SKILL.md tells the model never to hand-write them; `process.md` stays
-model-maintained.
+model-maintained except for the host-appended `## Auto Log` section at its
+end.
 
 ## Design notes
 
@@ -145,7 +149,8 @@ model-maintained.
   original kit.
 - The auto snapshot records the turn's last model output verbatim (facts,
   not summaries) — semantic progress still lives in the model-maintained
-  `process.md`.
+  `process.md`; the `## Auto Log` section gives it a per-turn, timestamped
+  trail without replacing that curation.
 - Local path installs (`dsh plugin add <path>`) resolve as a link;
   publishing to npm is the sturdier sharing route.
 

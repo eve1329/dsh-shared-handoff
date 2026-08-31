@@ -17,7 +17,8 @@
 
     # Host half: hook equivalents over the harness event system.
     # agent/pre-step (step 1) injects the active task baseline (SessionStart);
-    # session/event turn/end refreshes process.auto.md (Stop);
+    # session/event turn/end refreshes process.auto.md, captures the turn's
+    # last model text, and appends a `## Auto Log` line to process.md (Stop);
     # compaction/start|summary write snapshots and the context_guard marker
     # (PreCompact/PostCompact). All writes land in the same .agents/state/
     # layout the Codex and Claude editions use, under the session's cwd.
@@ -27,4 +28,5 @@
         enabled: true
         injectBaseline: true
         autoSnapshot: true
+        autoLog: true
         compactionGuard: true
