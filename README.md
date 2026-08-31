@@ -93,12 +93,19 @@ run automatically on the dsh host side via the harness event system —
 |---|---|---|
 | `SessionStart` | first `agent/pre-step` (step 1) | The active task's `process.md` / `process.auto.md` is injected as a baseline user message — say "继续" in a fresh session and the state is already there |
 | `Stop` | `session/event` `turn/end` | `process.auto.md` is refreshed after every turn (capturing the turn's last model output) and mirrored into an existing `process.recent.md`; the same turn also appends one summary line to the `## Auto Log` section of `process.md` (newest last, capped at `maxLogEntries`, hand-written sections untouched) |
-| `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | Snapshots are written before and after compaction plus a `context_guard.json` marker, and the guard state rides along with the injected baseline |
+| `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | Snapshots are written before and after compaction plus a `context_guard.json` marker; completed compactions increment `auto_compact_count`, and at `compactThreshold` (default 3) `clear_required` flips on and the next injected baseline carries a controlled-clear notice (hand off, start a fresh session) |
 
 Task resolution matches the original: the session's transcript binding in
 `session-tasks.json` first (dsh sessions align by their transcript path
 under `$DSH_HOME/sessions`), then the `current-task` pointer. Every write
 lands in the same `.agents/state/` the Codex/Claude editions use.
+
+**Interop with the Codex and pi editions**: `context_guard.json` is written
+read–merge–write with the Codex field contract (`auto_compact_count`,
+`clear_required`, `threshold`, `last_*`), and keys owned by other runtimes
+(`pi_compact_count`, `last_pi_session_id`, …) pass through untouched. The
+clear threshold check sums the pi and dsh counters together, so one repo
+alternated between runtimes still guards correctly.
 
 To disable a piece, override the row in your profile patch:
 
@@ -112,6 +119,7 @@ To disable a piece, override the row in your profile patch:
     compactionGuard: false  # no compaction guard
     maxLogChars: 300        # per-entry truncation for Auto Log lines
     maxLogEntries: 100      # Auto Log section length cap
+    compactThreshold: 3     # compactions before a controlled clear is advised
 ```
 
 `process.auto.md` and `context_guard.json` are host-owned metadata — the

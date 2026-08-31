@@ -86,12 +86,18 @@ Codex 或 Claude 里恢复，反之亦然（`session-tasks.json` 三方共用）
 |---|---|---|
 | `SessionStart` | 首个 `agent/pre-step`（step 1） | 自动把当前任务的 `process.md` / `process.auto.md` 作为基线用户消息注入会话——开新会话说一句"继续"即可，状态自动就位 |
 | `Stop` | `session/event` 的 `turn/end` | 每轮结束自动刷新 `process.auto.md`（截取该轮最后的模型输出），并镜像到已存在的 `process.recent.md`；同一时机还会向 `process.md` 末尾的 `## Auto Log` 段追加一行本轮摘要（新的在最后，上限 `maxLogEntries` 条，手写段落不受影响） |
-| `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | 压缩前后自动写快照 + 更新 `context_guard.json` 守卫标记，注入基线时附带守卫状态 |
+| `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | 压缩前后自动写快照 + 更新 `context_guard.json` 守卫；每完成一次压缩 `auto_compact_count` +1，达到 `compactThreshold`（默认 3）后 `clear_required` 置位，下一次基线注入附带 controlled clear 提示（先 handoff 保存进度，再开新会话） |
 
 任务归属的解析也与原版一致：先按当前会话 transcript 在
 `session-tasks.json` 里查绑定（dsh 会话按 `$DSH_HOME/sessions` 下的
 transcript 路径对齐），查不到再回退 `current-task` 指针。所有写入都落
 在与 Codex/Claude 同一份 `.agents/state/` 里，三方互通。
+
+**与 Codex / pi 版互通**：`context_guard.json` 采用读-合并-写，字段契约
+与 Codex 原版对齐（`auto_compact_count`、`clear_required`、`threshold`、
+`last_*`），其他 runtime 的专有键（`pi_compact_count`、
+`last_pi_session_id` 等）原样透传。清除阈值判定把 pi 与 dsh 的计数加总
+——同一个仓库在多个 runtime 之间交替使用，守护依然正确。
 
 不想用某项自动化时，在 profile 的 patch 里关掉：
 
@@ -105,6 +111,7 @@ transcript 路径对齐），查不到再回退 `current-task` 指针。所有�
     compactionGuard: false  # 关掉压缩守卫
     maxLogChars: 300        # Auto Log 单条截断长度
     maxLogEntries: 100      # Auto Log 段条数上限
+    compactThreshold: 3     # 压缩多少次后建议 controlled clear
 ```
 
 `process.auto.md` 与 `context_guard.json` 是 host 托管文件，模型不会手写

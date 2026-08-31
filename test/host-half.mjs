@@ -111,20 +111,45 @@ assert.equal(entryCount, 2, `auto log capped at maxLogEntries (got ${entryCount}
 assert.match(autoLogSection, /Reply 14\./, 'newest entry kept');
 assert.doesNotMatch(autoLogSection, /Reply 10\./, 'oldest entries dropped');
 
-// --- 3. compaction guard (payload nested under data) ---
+// --- 3. compaction guard (payload nested under data, codex-compatible fields) ---
 sessionEvent(session, ev('compaction/start', { compactionId: 'c1', turn: 1 }, 20));
 let guard = JSON.parse(readFileSync(join(repo, '.agents/state/tasks/smoke-task/context_guard.json'), 'utf8'));
 assert.equal(guard.phase, 'start');
 assert.equal(guard.taskId, 'smoke-task');
 assert.equal(guard.turn, 1);
 assert.equal(guard.compactionId, 'c1');
-sessionEvent(session, ev('compaction/summary', { compactionId: 'c1', summary: [{ type: 'text', text: 'Summary of compacted work.' }] }, 21));
+assert.equal(guard.last_event, 'PreCompact');
+assert.equal(guard.last_runtime, 'dsh');
+assert.equal(guard.auto_compact_count, 0, 'start does not increment');
+
+// interop: pi-owned fields must survive a dsh guard write
+writeFileSync(join(repo, '.agents/state/tasks/smoke-task/context_guard.json'), JSON.stringify({
+	auto_compact_count: 1,
+	pi_compact_count: 2,
+	clear_required: false,
+	last_pi_session_id: 'pi-session-xyz',
+	last_event: 'agent_settled',
+	last_runtime: 'pi',
+}));
+sessionEvent(session, ev('compaction/summary', { compactionId: 'c2', summary: [{ type: 'text', text: 'Summary of compacted work.' }] }, 21));
 guard = JSON.parse(readFileSync(join(repo, '.agents/state/tasks/smoke-task/context_guard.json'), 'utf8'));
 assert.equal(guard.phase, 'summary');
-assert.equal(guard.compactionId, 'c1');
+assert.equal(guard.compactionId, 'c2');
+assert.equal(guard.auto_compact_count, 2, 'dsh compaction increments the shared counter (1→2)');
+assert.equal(guard.pi_compact_count, 2, 'pi-owned counter preserved');
+assert.equal(guard.last_pi_session_id, 'pi-session-xyz', 'pi-owned field preserved');
+assert.equal(guard.last_event, 'PostCompact');
+assert.equal(guard.clear_required, false, 'below threshold: no clear required yet');
+
+// third compaction reaches the threshold → clear_required
+sessionEvent(session, ev('compaction/summary', { compactionId: 'c3', summary: [{ type: 'text', text: 'Third compaction.' }] }, 22));
+guard = JSON.parse(readFileSync(join(repo, '.agents/state/tasks/smoke-task/context_guard.json'), 'utf8'));
+assert.equal(guard.auto_compact_count, 3);
+assert.equal(guard.clear_required, true, 'threshold reached → clear_required');
+assert.equal(guard.pi_compact_count, 2, 'pi counter still preserved');
 const auto2 = readFileSync(join(repo, '.agents/state/tasks/smoke-task/process.auto.md'), 'utf8');
 assert.match(auto2, /post-compaction/);
-assert.match(auto2, /Summary of compacted work\./);
+assert.match(auto2, /Third compaction\./);
 
 // --- 4. baseline injection on first pre-step ---
 const decision = { kind: 'enter', messages: [{ id: 'u1', role: 'user', content: [] }] };
@@ -138,6 +163,8 @@ assert.equal(baseline.source.plugin, 'shared-handoff-dsh');
 assert.match(baseline.content[0].text, /Active task: smoke-task/);
 assert.match(baseline.content[0].text, /make the smoke test pass/);
 assert.match(baseline.content[0].text, /Compaction guard: summary/);
+assert.match(baseline.content[0].text, /Compaction guard ALERT/, 'threshold reached → baseline carries the controlled-clear notice');
+assert.match(baseline.content[0].text, /auto-compacted 5 times/, 'combined pi (2) + dsh (3) counters reported');
 
 // second pre-step for the same session must NOT inject again
 const again = await preStep({ agent, messages: [], step: 2, signal: undefined }, async () => decision);
