@@ -92,6 +92,8 @@ run automatically on the dsh host side via the harness event system —
 | Original hook | dsh equivalent | Behavior |
 |---|---|---|
 | `SessionStart` | first `agent/pre-step` (step 1) | The active task's `process.md` / `process.auto.md` is injected as a baseline user message — say "继续" in a fresh session and the state is already there; the baseline ends with a reminder to run the `handoff` skill after completing a milestone, keeping the semantic state fresh |
+| `UserPromptSubmit` (task routing) | `agent/pre-step` message scan | A `task=<id>` marker in the incoming user message re-binds the session and switches `current-task` (creating the task dir), then injects a switch notice for the new task |
+| Continuation | `agent/pre-step` message scan | A short continuation prompt (继续 / 接着 / resume / 交接 …) re-injects the persisted state mid-session, labeled as a re-injection |
 | `Stop` | `session/event` `turn/end` | `process.auto.md` is refreshed after every turn (capturing the turn's last model output) and mirrored into an existing `process.recent.md`; the same turn also appends one summary line to the `## Auto Log` section of `process.md` (newest last, capped at `maxLogEntries`, hand-written sections untouched) |
 | `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | Snapshots are written before and after compaction plus a `context_guard.json` marker; completed compactions increment `auto_compact_count`, and at `compactThreshold` (default 3) `clear_required` flips on and the next injected baseline carries a controlled-clear notice (hand off, start a fresh session) |
 

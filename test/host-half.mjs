@@ -172,6 +172,48 @@ assert.match(baseline.content[0].text, /不要重复已完成的事项/, 'remind
 const again = await preStep({ agent, messages: [], step: 2, signal: undefined }, async () => decision);
 assert.equal(again.messages.length, 1, 'no double injection');
 
+// --- 4b. task=xxx routing: marker re-binds and switches current-task ---
+const routedDecision = { kind: 'enter', messages: [{ id: 'rb', role: 'user', content: [] }] };
+const routedMsg = (t) => [{ id: `u-${Math.random()}`, role: 'user', content: [{ type: 'text', text: t }] }];
+const routed = await preStep({ agent, messages: routedMsg('新开 task=feature-y,做另一件事'), step: 1, signal: undefined }, async () => routedDecision);
+assert.equal(routed.messages.length, 2, 'task marker triggers injection for the routed task');
+assert.match(routed.messages[1].content[0].text, /Active task: feature-y/, 'routed baseline is the new task (fresh-task switch notice)');
+assert.equal(readFileSync(join(repo, '.agents/state/current-task'), 'utf8').trim(), 'feature-y', 'current-task switched');
+assert.ok(existsSync(join(repo, '.agents/state/tasks/feature-y')), 'task dir created by explicit routing');
+const routedMapping = JSON.parse(readFileSync(join(repo, '.agents/state/session-tasks.json'), 'utf8'));
+assert.equal(routedMapping.sessions[transcriptPath]?.task_id, 'feature-y', 'session binding re-routed');
+
+// --- 4c. continuation keyword re-injects mid-session ---
+const contDecision = { kind: 'enter', messages: [{ id: 'cb', role: 'user', content: [] }] };
+const cont = await preStep({ agent, messages: routedMsg('继续'), step: 1, signal: undefined }, async () => contDecision);
+assert.equal(cont.messages.length, 2, 'short continuation prompt re-injects');
+assert.match(cont.messages[1].content[0].text, /Active task: feature-y/, 're-injection reflects the latest task');
+// feature-y is fresh (no state) → the re-injection is its switch notice
+assert.match(cont.messages[1].content[0].text, /已切换到任务 "feature-y"/, 'fresh-task re-injection shows the switch notice');
+
+// give feature-y state, then a continuation re-injects the real baseline with the rekindle label
+writeFileSync(join(repo, '.agents/state/tasks/feature-y/process.md'), '## Current Task\n- feature-y work\n');
+const cont2 = await preStep({ agent, messages: routedMsg('继续这个任务'), step: 1, signal: undefined }, async () => contDecision);
+assert.equal(cont2.messages.length, 2, 're-injection after state exists');
+assert.match(cont2.messages[1].content[0].text, /feature-y work/, 're-injection carries the persisted state');
+assert.match(cont2.messages[1].content[0].text, /重新注入/, 're-injection is labeled as such');
+
+// a long message containing 继续 does NOT re-inject
+const longText = `关于这个方案我想再展开说说。${'细节补充。'.repeat(50)}继续深入分析一下。`;
+const longNoInject = await preStep({ agent, messages: routedMsg(longText), step: 1, signal: undefined }, async () => contDecision);
+assert.equal(longNoInject.messages.length, 1, 'long message mentioning 继续 does not re-inject');
+
+// a short message without any marker/keyword does NOT re-inject
+const plainNoInject = await preStep({ agent, messages: routedMsg('帮我看看别的'), step: 1, signal: undefined }, async () => contDecision);
+assert.equal(plainNoInject.messages.length, 1, 'plain short message does not re-inject');
+
+// our own plugin injections are never mistaken for continuation prompts
+const selfInject = await preStep({ agent, messages: [{ id: 'p1', role: 'user', content: [{ type: 'text', text: '继续' }], source: { kind: 'plugin', plugin: 'shared-handoff-dsh' } }], step: 1, signal: undefined }, async () => contDecision);
+assert.equal(selfInject.messages.length, 1, 'plugin-sourced messages never re-trigger injection');
+
+// restore current-task for the snapshot tests below
+writeFileSync(join(repo, '.agents/state/current-task'), 'smoke-task\n');
+
 // --- 5. robustness: malformed inputs never throw ---
 assert.doesNotThrow(() => sessionEvent(undefined, ev('turn/end', { turn: 2 })));
 assert.doesNotThrow(() => sessionEvent({ header: {} }, ev('compaction/start', {})));

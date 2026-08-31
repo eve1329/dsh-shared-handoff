@@ -37,6 +37,14 @@ case), its host half already automates what the Codex/Claude hooks did:
 - The active task's `process.md` / `process.auto.md` is injected as a
   baseline user message at the session's first step — do not re-derive or
   re-read those files unless the injected baseline is missing.
+- A `task=<id>` marker in a user message (e.g. `新开 task=feature-x`) is
+  routed by the host automatically: the session is re-bound and
+  `current-task` switches. When routing succeeds, the host injects a switch
+  notice; a fresh task starts with no `process.md` — create it from the
+  template below as the first piece of work.
+- A short continuation prompt (`继续` / `接着` / `resume` / `交接` / …)
+  re-injects the persisted state mid-session; the injection is labeled
+  `(状态按续接请求重新注入…)`.
 - `process.auto.md` is refreshed automatically at every turn end and across
   compactions — **never edit `process.auto.md` or `context_guard.json`
   yourself**; they are host-owned metadata. Maintain `process.md` by hand as
@@ -44,6 +52,21 @@ case), its host half already automates what the Codex/Claude hooks did:
 - If the baseline was not injected (plugin missing, repo has no
   `.agents/state/`, or a fresh clone), run the bootstrap script as described
   below to initialize state before continuing.
+- Unbound sessions default to the `main` task with automatic binding —
+  explicit `task=<id>` routing is only needed to *separate* work from `main`.
+
+## Task management without scripts (model-mediated)
+
+The host routes `task=<id>` markers, but listing and inspecting tasks is a
+read-only affair — do it directly, no bootstrap script needed:
+
+- **List tasks**: read directory names under `.agents/state/tasks/`; the
+  one matching `.agents/state/current-task` is active.
+- **Inspect a task**: read its `process.md` (semantic state) and the tail
+  of `## Auto Log` (recent activity).
+- **Switch tasks mid-session**: ask the user to send a message containing
+  `task=<id>` (host routing is authoritative — hand-editing
+  `session-tasks.json` from the model side is not).
 
 ## Prerequisites
 

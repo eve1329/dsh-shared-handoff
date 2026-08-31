@@ -85,6 +85,8 @@ Codex 或 Claude 里恢复，反之亦然（`session-tasks.json` 三方共用）
 | 原 hook | dsh 等价 | 行为 |
 |---|---|---|
 | `SessionStart` | 首个 `agent/pre-step`（step 1） | 自动把当前任务的 `process.md` / `process.auto.md` 作为基线用户消息注入会话——开新会话说一句"继续"即可，状态自动就位；基线末尾附带提醒：阶段性工作完成后主动运行 `handoff` 技能更新语义状态 |
+| `UserPromptSubmit`（task 路由） | `agent/pre-step` 消息扫描 | 用户消息中的 `task=<id>` 标记自动重绑会话并切换 `current-task`（新任务自动建目录），随后注入切换通知 |
+| 续接 | `agent/pre-step` 消息扫描 | 短续接指令（继续 / 接着 / resume / 交接…）在会话中途重新注入持久化状态，注入带"重新注入"标记 |
 | `Stop` | `session/event` 的 `turn/end` | 每轮结束自动刷新 `process.auto.md`（截取该轮最后的模型输出），并镜像到已存在的 `process.recent.md`；同一时机还会向 `process.md` 末尾的 `## Auto Log` 段追加一行本轮摘要（新的在最后，上限 `maxLogEntries` 条，手写段落不受影响） |
 | `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | 压缩前后自动写快照 + 更新 `context_guard.json` 守卫；每完成一次压缩 `auto_compact_count` +1，达到 `compactThreshold`（默认 3）后 `clear_required` 置位，下一次基线注入附带 controlled clear 提示（先 handoff 保存进度，再开新会话） |
 
