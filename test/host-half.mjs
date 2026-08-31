@@ -186,8 +186,51 @@ const bareRepo = mkdtempSync(join(tmpdir(), 'handoff-bare-'));
 sessionEvent({ header: { cwd: bareRepo, id: 'session-x' }, events: [] }, ev('turn/end', { turn: 1 }));
 assert.ok(!existsSync(join(bareRepo, '.agents')), 'no state invented in a bare repo');
 
+// --- 6. brand-new session with no binding defaults to main and auto-binds ---
+const freshRepo = mkdtempSync(join(tmpdir(), 'handoff-fresh-'));
+mkdirSync(join(freshRepo, '.agents/state'), { recursive: true });
+// no session-tasks.json entry, no current-task pointer, no tasks/ dir
+const freshSessionId = 'session-fresh-0001';
+mkdirSync(join(fakeDshHome, 'sessions', 'workspace-slug', freshSessionId), { recursive: true });
+const freshTranscript = join(fakeDshHome, 'sessions', 'workspace-slug', freshSessionId, 'session.jsonl.zstd');
+writeFileSync(freshTranscript, '');
+const freshSession = {
+	header: { cwd: freshRepo, id: freshSessionId },
+	id: freshSessionId,
+	events: [ev('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Fresh session reply.' }] } }, 1)],
+};
+sessionEvent(freshSession, ev('turn/end', { turn: 1, reason: { kind: 'completed' } }, 2));
+const freshAuto = readFileSync(join(freshRepo, '.agents/state/tasks/main/process.auto.md'), 'utf8');
+assert.match(freshAuto, /Task: main/, 'unbound new session lands on main');
+assert.match(freshAuto, /Fresh session reply\./, 'snapshot written for the auto-created default task');
+const freshMapping = JSON.parse(readFileSync(join(freshRepo, '.agents/state/session-tasks.json'), 'utf8'));
+assert.equal(freshMapping.sessions[freshTranscript]?.task_id, 'main', 'binding auto-written for the new session');
+assert.equal(freshMapping.sessions[freshTranscript]?.runtime, 'dsh');
+// current-task pointer also points at main now (pi parity)
+assert.equal(readFileSync(join(freshRepo, '.agents/state/current-task'), 'utf8').trim(), 'main', 'current-task defaults to main');
+
+// a repo whose current-task points elsewhere: a new session inherits that task (pi resolution order)
+const otherRepo = mkdtempSync(join(tmpdir(), 'handoff-other-'));
+mkdirSync(join(otherRepo, '.agents/state/tasks/feature-x'), { recursive: true });
+writeFileSync(join(otherRepo, '.agents/state/current-task'), 'feature-x');
+const otherSessionId = 'session-other-0001';
+mkdirSync(join(fakeDshHome, 'sessions', 'workspace-slug', otherSessionId), { recursive: true });
+writeFileSync(join(fakeDshHome, 'sessions', 'workspace-slug', otherSessionId, 'session.jsonl.zstd'), '');
+const otherSession = {
+	header: { cwd: otherRepo, id: otherSessionId },
+	id: otherSessionId,
+	events: [ev('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Feature work.' }] } }, 1)],
+};
+sessionEvent(otherSession, ev('turn/end', { turn: 1, reason: { kind: 'completed' } }, 2));
+const otherAuto = readFileSync(join(otherRepo, '.agents/state/tasks/feature-x/process.auto.md'), 'utf8');
+assert.match(otherAuto, /Task: feature-x/, 'unbound session inherits current-task (feature-x), not main');
+const otherMapping = JSON.parse(readFileSync(join(otherRepo, '.agents/state/session-tasks.json'), 'utf8'));
+assert.equal(otherMapping.sessions[join(fakeDshHome, 'sessions', 'workspace-slug', otherSessionId, 'session.jsonl.zstd')]?.task_id, 'feature-x', 'inherited task auto-bound');
+
 rmSync(repo, { recursive: true, force: true });
 rmSync(fakeDshHome, { recursive: true, force: true });
 rmSync(bareRepo, { recursive: true, force: true });
+rmSync(freshRepo, { recursive: true, force: true });
+rmSync(otherRepo, { recursive: true, force: true });
 if (warnings.length > 0) console.log('warnings:', warnings);
 console.log('ALL HOST-HALF SMOKE TESTS PASSED');
