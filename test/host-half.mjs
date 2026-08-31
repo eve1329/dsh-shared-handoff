@@ -165,6 +165,8 @@ assert.match(baseline.content[0].text, /make the smoke test pass/);
 assert.match(baseline.content[0].text, /Compaction guard: summary/);
 assert.match(baseline.content[0].text, /Compaction guard ALERT/, 'threshold reached → baseline carries the controlled-clear notice');
 assert.match(baseline.content[0].text, /auto-compacted 5 times/, 'combined pi (2) + dsh (3) counters reported');
+assert.match(baseline.content[0].text, /主动运行 `handoff`/, 'baseline carries the proactive-handoff reminder');
+assert.match(baseline.content[0].text, /不要重复已完成的事项/, 'reminder also tells the model not to redo done work');
 
 // second pre-step for the same session must NOT inject again
 const again = await preStep({ agent, messages: [], step: 2, signal: undefined }, async () => decision);

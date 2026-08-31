@@ -84,7 +84,7 @@ Codex 或 Claude 里恢复，反之亦然（`session-tasks.json` 三方共用）
 
 | 原 hook | dsh 等价 | 行为 |
 |---|---|---|
-| `SessionStart` | 首个 `agent/pre-step`（step 1） | 自动把当前任务的 `process.md` / `process.auto.md` 作为基线用户消息注入会话——开新会话说一句"继续"即可，状态自动就位 |
+| `SessionStart` | 首个 `agent/pre-step`（step 1） | 自动把当前任务的 `process.md` / `process.auto.md` 作为基线用户消息注入会话——开新会话说一句"继续"即可，状态自动就位；基线末尾附带提醒：阶段性工作完成后主动运行 `handoff` 技能更新语义状态 |
 | `Stop` | `session/event` 的 `turn/end` | 每轮结束自动刷新 `process.auto.md`（截取该轮最后的模型输出），并镜像到已存在的 `process.recent.md`；同一时机还会向 `process.md` 末尾的 `## Auto Log` 段追加一行本轮摘要（新的在最后，上限 `maxLogEntries` 条，手写段落不受影响） |
 | `PreCompact` / `PostCompact` | `compaction/start` / `compaction/summary` | 压缩前后自动写快照 + 更新 `context_guard.json` 守卫；每完成一次压缩 `auto_compact_count` +1，达到 `compactThreshold`（默认 3）后 `clear_required` 置位，下一次基线注入附带 controlled clear 提示（先 handoff 保存进度，再开新会话） |
 
@@ -109,6 +109,7 @@ transcript 路径对齐），查不到再回退 `current-task` 指针。所有�
     autoSnapshot: false     # 关掉每轮自动快照
     autoLog: false          # 关掉 process.md 的每轮 Auto Log 追加
     compactionGuard: false  # 关掉压缩守卫
+    handoffReminder: false  # 关掉基线里的主动 handoff 提醒
     maxLogChars: 300        # Auto Log 单条截断长度
     maxLogEntries: 100      # Auto Log 段条数上限
     compactThreshold: 3     # 压缩多少次后建议 controlled clear
