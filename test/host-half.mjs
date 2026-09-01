@@ -269,10 +269,58 @@ assert.match(otherAuto, /Task: feature-x/, 'unbound session inherits current-tas
 const otherMapping = JSON.parse(readFileSync(join(otherRepo, '.agents/state/session-tasks.json'), 'utf8'));
 assert.equal(otherMapping.sessions[join(fakeDshHome, 'sessions', 'workspace-slug', otherSessionId, 'session.jsonl.zstd')]?.task_id, 'feature-x', 'inherited task auto-bound');
 
+// --- 7. subagent sessions: read-only, never write state ---
+const subRepo = mkdtempSync(join(tmpdir(), 'handoff-sub-'));
+mkdirSync(join(subRepo, '.agents/state/tasks/main'), { recursive: true });
+writeFileSync(join(subRepo, '.agents/state/current-task'), 'main\n');
+writeFileSync(join(subRepo, '.agents/state/tasks/main/process.md'), '## Current Task\n- parent work\n');
+const subSessionId = 'sub-0001'; // subagent transcripts have no session- prefix
+mkdirSync(join(fakeDshHome, 'sessions', 'workspace-slug', subSessionId), { recursive: true });
+const subTranscript = join(fakeDshHome, 'sessions', 'workspace-slug', subSessionId, 'session.jsonl.zstd');
+writeFileSync(subTranscript, '');
+const subHeader = { cwd: subRepo, id: subSessionId, origin: 'subagent', delegationDepth: 1, parentSession: 'session-parent-0001' };
+const subSession = {
+	header: subHeader,
+	id: subSessionId,
+	events: [ev('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Child agent reply.' }] } }, 1)],
+};
+
+// 7a. turn/end from a subagent writes NOTHING (snapshot + auto log + guard)
+sessionEvent(subSession, ev('turn/end', { turn: 1, reason: { kind: 'completed' } }, 2));
+assert.ok(!existsSync(join(subRepo, '.agents/state/tasks/main/process.auto.md')), 'subagent turn/end writes no snapshot');
+const subProcess = readFileSync(join(subRepo, '.agents/state/tasks/main/process.md'), 'utf8');
+assert.doesNotMatch(subProcess, /Auto Log/, 'subagent output never enters the Auto Log');
+assert.ok(!existsSync(join(subRepo, '.agents/state/session-tasks.json')), 'subagent never auto-binds its transcript');
+
+// 7b. subagent pre-step: baseline IS injected (read), but task=xxx never routes
+const subDecision = { kind: 'enter', messages: [{ id: 'sb', role: 'user', content: [] }] };
+const subAgent = { session: subSession };
+const subInject = await preStep({ agent: subAgent, messages: [{ id: 'su1', role: 'user', content: [{ type: 'text', text: '审查这个仓库,注意 task=feature-z 分支的工作' }] }], step: 1, signal: undefined }, async () => subDecision);
+assert.equal(subInject.messages.length, 2, 'subagent first step gets the baseline (read-only)');
+assert.match(subInject.messages[1].content[0].text, /Active task: main/, 'baseline reflects the repo task, not the mentioned marker');
+assert.equal(readFileSync(join(subRepo, '.agents/state/current-task'), 'utf8').trim(), 'main', 'subagent task= marker does NOT hijack current-task');
+assert.ok(!existsSync(join(subRepo, '.agents/state/tasks/feature-z')), 'subagent marker does not create a task dir');
+assert.ok(!existsSync(join(subRepo, '.agents/state/session-tasks.json')), 'subagent marker does not write bindings');
+
+// 7c. delegationDepth-only header (fork children) is also detected
+const forkSession = { header: { cwd: subRepo, id: 'fork-0001', delegationDepth: 2 }, id: 'fork-0001', events: [] };
+sessionEvent(forkSession, ev('turn/end', { turn: 1, reason: { kind: 'completed' } }));
+assert.ok(!existsSync(join(subRepo, '.agents/state/tasks/main/process.auto.md')), 'fork child (delegationDepth) also writes nothing');
+
+// 7d. subagent in a repo with NO resolvable task: no baseline, no state invented
+const emptySubRepo = mkdtempSync(join(tmpdir(), 'handoff-emptysub-'));
+mkdirSync(join(emptySubRepo, '.agents/state'), { recursive: true }); // state dir, no tasks, no pointer
+const emptySubSession = { header: { cwd: emptySubRepo, id: 'sub-0002', origin: 'subagent' }, id: 'sub-0002', events: [] };
+const emptySubInject = await preStep({ agent: { session: emptySubSession }, messages: [{ id: 'eu1', role: 'user', content: [{ type: 'text', text: '干活' }] }], step: 1, signal: undefined }, async () => ({ kind: 'enter', messages: [] }));
+assert.ok(!existsSync(join(emptySubRepo, '.agents/state/tasks')), 'no default task invented for a subagent');
+assert.ok(!existsSync(join(emptySubRepo, '.agents/state/current-task')), 'no current-task pointer invented for a subagent');
+
 rmSync(repo, { recursive: true, force: true });
 rmSync(fakeDshHome, { recursive: true, force: true });
 rmSync(bareRepo, { recursive: true, force: true });
 rmSync(freshRepo, { recursive: true, force: true });
 rmSync(otherRepo, { recursive: true, force: true });
+rmSync(subRepo, { recursive: true, force: true });
+rmSync(emptySubRepo, { recursive: true, force: true });
 if (warnings.length > 0) console.log('warnings:', warnings);
 console.log('ALL HOST-HALF SMOKE TESTS PASSED');

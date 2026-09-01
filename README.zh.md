@@ -130,6 +130,12 @@ transcript 路径对齐），查不到再回退 `current-task` 指针。所有�
 - **host 半（hook 等价）**：插件本体零外部依赖（仅 Node 内置模块），
   监听 `agent/pre-step` 与 `session/event` 实现注入/快照/守卫，见上文
   「自动化」；监听器自吞错误，快照失败绝不会打断 agent 循环。
+- **子代理只读（单写者规则）**：委派子代理与 fork 分身
+  （`origin: "subagent"` / `delegationDepth > 0`）只接收基线注入，绝不写
+  状态——不写快照、不进 Auto Log、不写绑定、不更新压缩守卫、也不响应
+  `task=<id>` 路由（委派 prompt 里提到的任务标记不会劫持仓库的当前任务）。
+  否则并行子代理会互相覆盖快照、交错污染 Auto Log；父会话是唯一写者，
+  子代理的发现通过最终报告回流并由父会话记录。
 - **会话绑定**：dsh 在受管 bash/PowerShell 环境注入 `DSH_SESSION_JSONL`
   （当前会话 transcript 路径），bootstrap 脚本以 `--transcript-path` 绑定，
   脚本本体零改动，与 Codex/Claude 版写入同一份 `session-tasks.json`。

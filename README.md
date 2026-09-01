@@ -140,6 +140,14 @@ end.
   builtins only) — listens to `agent/pre-step` and `session/event` for
   injection/snapshots/guard, see Automation above; listeners swallow their
   own errors, so a snapshot failure can never break the agent loop.
+- **Subagents are read-only (single-writer rule)**: delegated children and
+  forks (`origin: "subagent"` / positive `delegationDepth`) receive the
+  baseline injection but never write state — no snapshots, no Auto Log
+  entries, no bindings, no compaction-guard updates, and no `task=<id>`
+  routing (a delegated prompt mentioning a task marker cannot hijack the
+  repo's active task). Parallel children would otherwise clobber each
+  other's snapshots and interleave the Auto Log; the parent session is the
+  single writer, and children's findings flow back through their reports.
 - **Session binding**: dsh injects `DSH_SESSION_JSONL` (the current session
   transcript path) into the managed bash/PowerShell environment; the
   bootstrap script binds it via `--transcript-path` with zero script changes,
