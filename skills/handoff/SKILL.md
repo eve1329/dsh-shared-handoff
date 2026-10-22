@@ -105,6 +105,7 @@ In a fresh thread, prefer:
 
 - Project instructions: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`
 - State files: `progress.md`, `session-state.md`, `todo.md`, `verification.md`, `spec.md`, `evaluation.md`
+- Existing handoff files, filtered by status — only `in-progress` ones need continuation
 - `.agents/state/tasks/<task-id>/process.md` when the task-id workflow is in use
 - Git state: branch, status, and relevant diffs
 - Task-specific docs and touched files
@@ -128,11 +129,26 @@ If the handoff says one thing but the files or git state say another, trust the 
 
 Do not spend the first turn re-summarizing everything. Restore the minimum needed context, tell the user what you reconstructed, then take the next step.
 
+## Status and the Handoff Ledger
+
+A handoff is a living artifact, not a one-shot message. Two rules keep
+"which handoff is still active?" answerable without memory:
+
+- Every handoff states its status — `in-progress`, `done`, or `abandoned` — plus
+  a one-line criterion for "done".
+- When several handoffs share a directory, put the status where the next session
+  sees it first (the file name or the first lines of the file), and flip it once
+  the work is verified. Keep the file afterwards; it is the evidence.
+
+When resuming, read only `in-progress` handoffs — `done` and `abandoned` ones are
+history.
+
 ## Required Contents
 
 | Section | Must include |
 |---|---|
 | Workspace | Absolute path and branch |
+| Status | `in-progress` / `done` / `abandoned`, plus a one-line "done when" criterion |
 | Task | Current task or target outcome |
 | Done | What is complete and should not be repeated |
 | Key files | The files or modules that matter most |
@@ -147,6 +163,8 @@ Use this when the continuation is straightforward.
 ```text
 Workspace: /absolute/path/to/repo
 Branch: branch-name
+Status: in-progress | done
+Done when: <one-line criterion for done>
 Current date: YYYY-MM-DD
 
 Working rules:
@@ -189,6 +207,8 @@ Use this when the task is risky, multi-step, or easy to misread.
 Workspace: /absolute/path/to/repo
 Branch: branch-name
 Dirty worktree: yes|no
+Status: in-progress | done
+Done when: <one-line criterion for done>
 Current date: YYYY-MM-DD
 
 Mission:
@@ -235,6 +255,8 @@ Recommended next step:
 - Never present guesses as completed facts.
 - Never tell the next session to "inspect everything" when you already know the likely next step.
 - Never forget to mention dirty-worktree constraints when they matter.
+- Never leave the handoff status implicit: say whether it is `in-progress` or `done`, and give the one-line "done when" criterion.
+- When a directory holds several handoffs, mark each status where the next session looks first (file name or first lines), not only deep in the body.
 - Never ask the next session to redo known-good work without a concrete reason.
 
 ## Good Handoff Characteristics
