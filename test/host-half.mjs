@@ -315,6 +315,19 @@ const emptySubInject = await preStep({ agent: { session: emptySubSession }, mess
 assert.ok(!existsSync(join(emptySubRepo, '.agents/state/tasks')), 'no default task invented for a subagent');
 assert.ok(!existsSync(join(emptySubRepo, '.agents/state/current-task')), 'no current-task pointer invented for a subagent');
 
+// --- baseline state has one shared UTF-8 byte budget ---
+const budgetTask = join(repo, ".agents/state/tasks/smoke-task");
+writeFileSync(join(budgetTask, "process.md"), "项目🙂".repeat(100));
+writeFileSync(join(budgetTask, "process.auto.md"), "自动".repeat(100));
+const budgetListeners = new Map();
+plugin.apply({ on: (event, handler) => budgetListeners.set(event, handler) }, { dshHome: fakeDshHome, maxBaselineBytes: 96 });
+const budgetSession = { ...session, events: [] };
+const budgetResult = await budgetListeners.get("agent/pre-step")({ agent: { session: budgetSession }, messages: [], step: 1 }, async () => ({ kind: "enter", messages: [] }));
+const budgetText = budgetResult.messages[0].content[0].text;
+const stateText = budgetText.slice(budgetText.indexOf("### process.md"), budgetText.indexOf("以上是持久化"));
+assert.ok(Buffer.byteLength(stateText, "utf8") <= 160, "combined state stays bounded");
+assert.doesNotMatch(stateText, /�/, "UTF-8 truncation never splits a character");
+
 rmSync(repo, { recursive: true, force: true });
 rmSync(fakeDshHome, { recursive: true, force: true });
 rmSync(bareRepo, { recursive: true, force: true });
