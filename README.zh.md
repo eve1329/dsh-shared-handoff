@@ -22,6 +22,10 @@ dsh plugin --profile web add shared-handoff-dsh
 
 重启 `dsh web` 后，两个技能进入技能目录，模型经 `skill` 工具加载。
 
+使用 DSH 会话格式 v4 时，请升级到 **0.3.3 或以上版本**。该版本修复任务
+状态注入时的 `format v4 message requires a producer-owned source kind`
+错误，并防止注入的上下文被误识别为任务切换或续接指令。
+
 ## 使用
 
 装好后**不需要任何命令**——技能由对话触发，模型自动加载对应 SKILL.md。

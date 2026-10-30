@@ -23,6 +23,10 @@ dsh plugin --profile web add shared-handoff-dsh
 After restarting `dsh web`, both skills join the skill catalog and the model
 loads them through the `skill` tool.
 
+For DSH session format v4, use **0.3.3 or later**. This release fixes the
+`format v4 message requires a producer-owned source kind` failure during
+task-state injection and keeps injected context out of task-routing input.
+
 ## Usage
 
 Once installed there is **no command to remember** — the skills are

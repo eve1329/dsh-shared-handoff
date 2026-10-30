@@ -8,15 +8,21 @@
 //   3. compaction/start|summary write context_guard.json + snapshots
 //   4. agent/pre-step step 1 appends a baseline user message with task state
 //   5. listeners never throw on malformed input
+// Optional integration: DSH_V4_FORMAT_MODULE points to an installed
+// @deepseek-ai/dsh-session-format-v3-to-v4/lib/index.js for real V4 admission.
+// DSH_PLUGIN_MODULE can select the installed plugin instead of this checkout.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const plugin = await import(join(root, 'lib/index.js'));
+const plugin = await import(pathToFileURL(process.env.DSH_PLUGIN_MODULE || join(root, 'lib/index.js')).href);
+const v4Format = process.env.DSH_V4_FORMAT_MODULE
+	? await import(pathToFileURL(process.env.DSH_V4_FORMAT_MODULE).href)
+	: undefined;
 
 /** Build a session event in the real DSH shape: payload nested under `data`. */
 function ev(type, data, seq = 0) {
@@ -159,7 +165,15 @@ assert.equal(enriched.kind, 'enter');
 assert.equal(enriched.messages.length, 2, 'baseline appended');
 const baseline = enriched.messages[1];
 assert.equal(baseline.role, 'user');
-assert.equal(baseline.source.plugin, 'shared-handoff-dsh');
+assert.deepEqual(baseline.source, { kind: 'plugin:shared-handoff-dsh' }, 'V4 uses producer identity without the retired plugin wrapper');
+if (v4Format) {
+	const spliced = ev('agent/inbox/spliced', { turn: 1, step: 1, inserted: [baseline] });
+	assert.doesNotThrow(() => v4Format.assertV4RowAdmission(spliced), 'injection passes installed DSH V4 admission');
+	assert.doesNotThrow(() => v4Format.releasedV4SessionFormatCodec.encodeEvent(spliced), 'injection passes the installed V4 encoder');
+	const legacy = { ...baseline, source: { kind: 'plugin', plugin: 'shared-handoff-dsh' } };
+	assert.throws(() => v4Format.assertV4RowAdmission(ev('agent/inbox/spliced', { inserted: [legacy] })),
+		/format v4 message requires a producer-owned source kind/, 'negative control reproduces the original failure');
+}
 assert.match(baseline.content[0].text, /Active task: smoke-task/);
 assert.match(baseline.content[0].text, /make the smoke test pass/);
 assert.match(baseline.content[0].text, /Compaction guard: summary/);
@@ -174,7 +188,7 @@ assert.equal(again.messages.length, 1, 'no double injection');
 
 // --- 4b. task=xxx routing: marker re-binds and switches current-task ---
 const routedDecision = { kind: 'enter', messages: [{ id: 'rb', role: 'user', content: [] }] };
-const routedMsg = (t) => [{ id: `u-${Math.random()}`, role: 'user', content: [{ type: 'text', text: t }] }];
+const routedMsg = (t) => [{ id: `u-${Math.random()}`, role: 'user', content: [{ type: 'text', text: t }], source: { kind: 'user' } }];
 const routed = await preStep({ agent, messages: routedMsg('新开 task=feature-y,做另一件事'), step: 1, signal: undefined }, async () => routedDecision);
 assert.equal(routed.messages.length, 2, 'task marker triggers injection for the routed task');
 assert.match(routed.messages[1].content[0].text, /Active task: feature-y/, 'routed baseline is the new task (fresh-task switch notice)');
@@ -207,9 +221,24 @@ assert.equal(longNoInject.messages.length, 1, 'long message mentioning 继续 do
 const plainNoInject = await preStep({ agent, messages: routedMsg('帮我看看别的'), step: 1, signal: undefined }, async () => contDecision);
 assert.equal(plainNoInject.messages.length, 1, 'plain short message does not re-inject');
 
-// our own plugin injections are never mistaken for continuation prompts
-const selfInject = await preStep({ agent, messages: [{ id: 'p1', role: 'user', content: [{ type: 'text', text: '继续' }], source: { kind: 'plugin', plugin: 'shared-handoff-dsh' } }], step: 1, signal: undefined }, async () => contDecision);
-assert.equal(selfInject.messages.length, 1, 'plugin-sourced messages never re-trigger injection');
+// Only human messages can trigger routing or continuation. V4 producer
+// sources and legacy V3 plugin messages must not hijack the active task.
+for (const source of [
+	{ kind: 'plugin:shared-handoff-dsh' },
+	{ kind: 'plugin:hindsight', form: 'recall' },
+	{ kind: 'time-context' },
+	{ kind: 'plugin', plugin: 'shared-handoff-dsh' },
+	undefined,
+]) {
+	const context = { id: 'p1', role: 'user', content: [{ type: 'text', text: '继续 task=injected-task' }], ...(source ? { source } : {}) };
+	const ignored = await preStep({ agent, messages: [context], step: 1 }, async () => contDecision);
+	assert.equal(ignored, contDecision, 'non-human context never routes or re-triggers injection');
+	assert.equal(readFileSync(join(repo, '.agents/state/current-task'), 'utf8').trim(), 'feature-y');
+	assert.ok(!existsSync(join(repo, '.agents/state/tasks/injected-task')), 'context task markers create no state');
+	const mixed = await preStep({ agent, messages: [...routedMsg('继续'), context], step: 1 }, async () => contDecision);
+	assert.equal(mixed.messages.length, 2, 'a trailing context message does not hide a real continuation');
+	assert.match(mixed.messages[1].content[0].text, /Active task: feature-y/);
+}
 
 // restore current-task for the snapshot tests below
 writeFileSync(join(repo, '.agents/state/current-task'), 'smoke-task\n');
@@ -295,7 +324,7 @@ assert.ok(!existsSync(join(subRepo, '.agents/state/session-tasks.json')), 'subag
 // 7b. subagent pre-step: baseline IS injected (read), but task=xxx never routes
 const subDecision = { kind: 'enter', messages: [{ id: 'sb', role: 'user', content: [] }] };
 const subAgent = { session: subSession };
-const subInject = await preStep({ agent: subAgent, messages: [{ id: 'su1', role: 'user', content: [{ type: 'text', text: '审查这个仓库,注意 task=feature-z 分支的工作' }] }], step: 1, signal: undefined }, async () => subDecision);
+const subInject = await preStep({ agent: subAgent, messages: [{ id: 'su1', role: 'user', content: [{ type: 'text', text: '审查这个仓库,注意 task=feature-z 分支的工作' }], source: { kind: 'user' } }], step: 1, signal: undefined }, async () => subDecision);
 assert.equal(subInject.messages.length, 2, 'subagent first step gets the baseline (read-only)');
 assert.match(subInject.messages[1].content[0].text, /Active task: main/, 'baseline reflects the repo task, not the mentioned marker');
 assert.equal(readFileSync(join(subRepo, '.agents/state/current-task'), 'utf8').trim(), 'main', 'subagent task= marker does NOT hijack current-task');
