@@ -136,10 +136,42 @@ A handoff is a living artifact, not a one-shot message. Two rules keep
 
 - Every handoff states its status — `in-progress`, `done`, or `abandoned` — plus
   a one-line criterion for "done".
-- When several handoffs share a directory, put the status where the next session
-  sees it first (the file name or the first lines of the file). Set it to `done`
-  only after the completion criterion is verified, or `abandoned` when the task
-  is intentionally discontinued. Keep the file afterwards; it is the evidence.
+- When several handoffs share a directory, encode the status in the file name
+  before the date. Set it to `done` only after the completion criterion is
+  verified, or `abandoned` when the task is intentionally discontinued. Keep
+  the file afterwards; it is the evidence.
+
+### Where the status lives
+
+When one directory holds several handoffs, use this file-name format:
+
+```text
+(<status>) <YYYYMMDD>-<topic>.md
+```
+
+For example:
+
+```text
+(in-progress) 20261029-auth-refactor.md
+(done)        20261022-ledger-tool.md
+```
+
+Put the status first so a directory listing groups handoffs by status, then
+the date so each group sorts by recency. Keep the same status in the file's
+`Status:` header: the file is the evidence, and its name is the index.
+
+Change a handoff's status by renaming it and updating its `Status:` header in
+the same change. Never update only one and leave the name and header in
+disagreement. Keep completed files; if moving one to an archive directory,
+update the file name and header to `done` before moving it.
+
+This convention applies to standalone handoff files. Keep canonical task-state
+files such as `process.md`, `process.auto.md`, and `process.recent.md` at their
+documented paths; do not rename them with a status prefix.
+
+Existing handoffs without a status prefix remain valid. Do not skip or rename
+one just because it uses an older name; apply this naming convention when
+creating a handoff or next updating its status.
 
 When resuming, continue `in-progress` handoffs. Treat explicitly `done` and
 `abandoned` handoffs as history unless the user asks to reopen them or their
@@ -264,7 +296,9 @@ Recommended next step:
 - Never tell the next session to "inspect everything" when you already know the likely next step.
 - Never forget to mention dirty-worktree constraints when they matter.
 - When writing or updating a handoff, state `in-progress`, `done`, or `abandoned`, and give the one-line "done when" criterion.
-- When a directory holds several handoffs, mark each status where the next session looks first (file name or first lines), not only deep in the body.
+- When several standalone handoffs share a directory, put the status first in each file name, ahead of the date: `(<status>) <YYYYMMDD>-<topic>.md`.
+- Never let a standalone handoff's status prefix and `Status:` header disagree.
+- Change a standalone handoff's status by renaming the file and updating its `Status:` header together, never one without the other.
 - Never ask the next session to redo known-good work without a concrete reason.
 
 ## Good Handoff Characteristics
